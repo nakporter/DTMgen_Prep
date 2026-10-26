@@ -1,0 +1,5 @@
+Set-Location "$env:USERPROFILE\Desktop\SOCET-OrthoWorkflow"
+
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+.\Start-OrthoWorkflow.ps1

@@ -1,0 +1,61 @@
+{
+  "SchemaVersion": "0.2",
+  "Purpose": "Generic completed-project parser. It validates structural filename suffixes and captures variable image identifiers and levels without hardcoding project-specific values.",
+  "KnownUnresolvedItems": [
+    "The parser assumes standard RAW names begin with SS_, while their corresponding shell names omit that prefix.",
+    "The parser treats _o as a required structural marker, with the level immediately before it.",
+    "The parser assumes COLOR filenames use an uppercase standalone BG, IR, or RED token immediately before the level and _o marker.",
+    "The parser assumes standard ortho products do not use BG, IR, or RED as a standalone underscore-delimited channel token before the level and _o marker.",
+    "The confirmed SOCET working directories for ortho2isis3 and dem2isis3 on Windows."
+  ],
+  "Conversion": {
+    "OutputDirectoryName": "output_products",
+    "OrthoExecutionMode": "BatchFile",
+    "OrthoWorkingDirectory": "OutputProductsDirectory",
+    "DemWorkingDirectory": "ProjectDirectory",
+    "Notes": "output_products is provisional: original notes also say output_product. BatchFile preserves the manual workflow; validate it with Test-WindowsEnvironment.ps1 and a copied/noncritical project."
+  },
+  "OutputCompletionVerification": {
+    "Enabled": false,
+    "RequireExistence": true,
+    "RequireNonZeroBytes": true,
+    "RequireStableSize": true,
+    "StableCheckCount": 2,
+    "PollingIntervalSeconds": 15,
+    "TimeoutSeconds": 7200,
+    "OrthoOutputDirectory": null,
+    "DemOutputDirectory": null,
+    "Notes": "Design only and disabled: no verifier is invoked. Windows testing confirmed that start_socet.bat uses start /b /WAIT and is synchronous when -single and the task token are unquoted; output polling is therefore not part of the active workflow."
+  },
+  "OutputStructure": {
+    "RequireColorDirectory": true,
+    "MainFolder": {
+      "ExpectedFileCount": 15,
+      "ExpectedDirectoryCount": 1,
+      "ExpectedRawCount": 6,
+      "ExpectedShellScriptCount": 5,
+      "ExpectedReportCount": 1,
+      "ExpectedPngCount": 1,
+      "ExpectedGnuCount": 1,
+      "ExpectedLisCount": 1
+    },
+    "ColorFolder": {
+      "ExpectedFileCount": 24,
+      "ExpectedRawCount": 12,
+      "ExpectedShellScriptCount": 12
+    }
+  },
+  "ProductRules": [
+    { "Name": "Standard ortho RAW", "Role": "StandardOrthoRaw", "Group": "Standard", "SearchLocation": "OutputProductsDirectory", "Pattern": "^SS_(?!DTM_)(?!FOM_)(?!.*_(?:BG|IR|RED)_[^_]+_o\\.raw$)(?<ImageId>.+)_(?<Level>[^_]+)_o\\.raw$", "ExpectedCount": 4, "Enabled": true },
+    { "Name": "Standard ortho SH", "Role": "StandardOrthoSh", "Group": "Standard", "SearchLocation": "OutputProductsDirectory", "Pattern": "^(?!.*_(?:BG|IR|RED)_[^_]+_o_ortho2isis3\\.sh$)(?<ImageId>.+)_(?<Level>[^_]+)_o_ortho2isis3\\.sh$", "ExpectedCount": 4, "Enabled": true },
+    { "Name": "SS_DTM RAW", "Role": "DtmRaw", "Group": "Standard", "SearchLocation": "ProjectDirectory", "Pattern": "^SS_DTM_(?<DtmId>.+)\\.raw$", "ExpectedCount": 1, "Enabled": true },
+    { "Name": "SS_FOM RAW", "Role": "FomRaw", "Group": "Standard", "SearchLocation": "ProjectDirectory", "Pattern": "^SS_FOM_(?<FomId>.+)\\.raw$", "ExpectedCount": 1, "Enabled": true },
+    { "Name": "DEM generated SH", "Role": "DemSh", "Group": "Standard", "SearchLocation": "ProjectDirectory", "Pattern": "^(?<DemId>.+)_dem2isis3\\.sh$", "ExpectedCount": 1, "Enabled": true },
+    { "Name": "Final triangulation REP", "Role": "TriangulationRep", "Group": "Standard", "SearchLocation": "ProjectDirectory", "Pattern": "^MST_{ProjectNameRegex}\\.rep$", "ExpectedCount": 1, "Enabled": true },
+    { "Name": "Selected-DEM GeoTIFF Error Map PNG", "Role": "ErrorMapPng", "Group": "Standard", "SearchLocation": "ProjectDirectory", "Pattern": "^{SelectedDemBaseNameRegex}_GeoTIFF_Error_Map\\.png$", "ExpectedCount": 1, "Enabled": true },
+    { "Name": "Project information LIS", "Role": "ProjectInfoLis", "Group": "Standard", "SearchLocation": "ImagesProjectDirectory", "Pattern": "^{ProjectNameRegex}_SS_statistics\\.lis$", "RequiredExtension": ".lis", "NonZeroCandidatesOnly": true, "ExpectedCount": 1, "Enabled": true },
+    { "Name": "Selected-DEM GeoTIFF Error Map GNU", "Role": "GeoTiffGnu", "Group": "Standard", "SearchLocation": "ProjectDirectory", "Pattern": "^{SelectedDemBaseNameRegex}_GeoTIFF_Error_Map\\.gnu$", "ExpectedCount": 1, "Enabled": true },
+    { "Name": "COLOR RAW", "Role": "ColorRaw", "Group": "Color", "SearchLocation": "OutputProductsDirectory", "Pattern": "^SS_(?<ImageId>.+)_(?<Channel>BG|IR|RED)_(?<Level>[^_]+)_o\\.raw$", "ExpectedCount": 12, "Enabled": true },
+    { "Name": "COLOR SH", "Role": "ColorSh", "Group": "Color", "SearchLocation": "OutputProductsDirectory", "Pattern": "^(?<ImageId>.+)_(?<Channel>BG|IR|RED)_(?<Level>[^_]+)_o_ortho2isis3\\.sh$", "ExpectedCount": 12, "Enabled": true }
+  ]
+}
