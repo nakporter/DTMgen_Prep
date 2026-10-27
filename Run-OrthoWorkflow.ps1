@@ -2,11 +2,15 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$ProjectName,
-	[Parameter(Mandatory)][string]$ProducerName,
-	[Parameter(Mandatory)][string]$ReadmePath,
+    [Parameter(Mandatory)][string]$ProducerName,
+    [Parameter(Mandatory)][string]$ReadmePath,
     [string]$DemName,
+    [string]$DemPath,
+    [AllowEmptyCollection()][string[]]$SupPaths = @(),
+    [ValidateSet('Automatic','Manual')][string]$SupSelectionMode = 'Automatic',
     [string]$SocetDataRoot = 'E:\Socet\data',
     [string]$SocetImagesRoot = 'E:\Socet\images',
+    [string]$StatisticsLisPath,
     [string]$StartSocetPath = 'C:\SOCET_SET_5.6.0\bin\start_socet.bat',
     [string]$DesktopRoot = [Environment]::GetFolderPath('Desktop'),
     [string]$ConfigPath = (Join-Path $PSScriptRoot 'ortho-workflow.config.example.json'),
@@ -14,6 +18,7 @@ param(
     [switch]$DryRun,
     [switch]$SkipConversions,
     [switch]$Force,
+    [switch]$EnableInteractivePreflightRetry,
     [switch]$ConfirmRealExecution
 )
 
@@ -22,16 +27,20 @@ $ErrorActionPreference = 'Stop'
 
 Import-Module (Join-Path $PSScriptRoot 'Modules/OrthoWorkflow.psm1') -Force
 
-if (-not (Test-Path -LiteralPath $ReadmePath -PathType Leaf)) {
-    throw "README file was not found: $ReadmePath"
-}
-
 $reportContext = Get-WorkflowReportContext -ProjectRoot $PSScriptRoot
 $state = New-WorkflowState -ProjectName $ProjectName -ReportContext $reportContext -DryRun:$DryRun
 $exitCode = 0
 
 try {
     Assert-SafeProjectName -ProjectName $ProjectName | Out-Null
+    if ([string]::IsNullOrWhiteSpace($ProducerName)) { throw 'ProducerName cannot be blank.' }
+    $readmeFullPath = [IO.Path]::GetFullPath($ReadmePath)
+    if (-not (Test-Path -LiteralPath $readmeFullPath -PathType Leaf)) { throw "README file was not found: $readmeFullPath" }
+    $readmeFile = Get-Item -LiteralPath $readmeFullPath -Force
+    if ($readmeFile.PSIsContainer) { throw "README path must be a file: $readmeFullPath" }
+    [IO.File]::ReadAllBytes($readmeFile.FullName) | Out-Null
+    $state.ProducerName = $ProducerName
+    $state.ReadmePath = $readmeFile.FullName
     if (-not $DryRun -and -not $ConfirmRealExecution) {
         throw 'Real execution is intentionally gated. Re-run with -ConfirmRealExecution only after Windows environment validation and a controlled acceptance test.'
     }
@@ -57,24 +66,53 @@ try {
     }
 
     Assert-ExistingDirectory -Path $SocetDataRoot -Label 'SocetDataRoot' | Out-Null
-    Assert-ExistingDirectory -Path $SocetImagesRoot -Label 'SocetImagesRoot' | Out-Null
-    Assert-ExistingDirectory -Path $DesktopRoot -Label 'DesktopRoot' | Out-Null
     $projectDirectory = Resolve-ContainedPath -Root $SocetDataRoot -Child $ProjectName -ChildLabel 'ProjectName'
-    $imagesProjectDirectory = Resolve-ContainedPath -Root $SocetImagesRoot -Child $ProjectName -ChildLabel 'ProjectName'
     Assert-ExistingDirectory -Path $projectDirectory -Label 'Project directory' | Out-Null
-    Assert-ExistingDirectory -Path $imagesProjectDirectory -Label 'SOCET images project directory' | Out-Null
+    $imagesProjectDirectory = $null
+    $statisticsLisFile = $null
+    if ([string]::IsNullOrWhiteSpace($StatisticsLisPath)) {
+        Assert-ExistingDirectory -Path $SocetImagesRoot -Label 'SocetImagesRoot' | Out-Null
+        $imagesProjectDirectory = Resolve-ContainedPath -Root $SocetImagesRoot -Child $ProjectName -ChildLabel 'ProjectName'
+        Assert-ExistingDirectory -Path $imagesProjectDirectory -Label 'SOCET images project directory' | Out-Null
+    }
+    else {
+        $statisticsLisFullPath = [IO.Path]::GetFullPath($StatisticsLisPath)
+        if (-not (Test-Path -LiteralPath $statisticsLisFullPath -PathType Leaf)) { throw "Selected statistics LIS file was not found: $statisticsLisFullPath" }
+        $statisticsLisFile = Get-Item -LiteralPath $statisticsLisFullPath -Force
+        if ($statisticsLisFile.PSIsContainer -or $statisticsLisFile.Extension -ine '.lis') { throw "Selected statistics file must be a .lis file: $statisticsLisFullPath" }
+        if ($statisticsLisFile.Length -le 0) { throw "Selected statistics LIS file is zero bytes: $statisticsLisFullPath" }
+        if (Test-Path -LiteralPath $SocetImagesRoot -PathType Container) {
+            $candidateImagesProjectDirectory = Resolve-ContainedPath -Root $SocetImagesRoot -Child $ProjectName -ChildLabel 'ProjectName'
+            if (Test-Path -LiteralPath $candidateImagesProjectDirectory -PathType Container) { $imagesProjectDirectory = $candidateImagesProjectDirectory }
+        }
+    }
     Assert-SafeLeafName -Name $config.Conversion.OutputDirectoryName -Label 'Conversion.OutputDirectoryName' | Out-Null
     $outputProductsDirectory = Resolve-ContainedPath -Root $projectDirectory -Child $config.Conversion.OutputDirectoryName -ChildLabel 'output directory name'
     $stagingDirectory = Resolve-ContainedPath -Root $DesktopRoot -Child $ProjectName -ChildLabel 'ProjectName'
     $state.SourceProjectDirectory = $projectDirectory
     $state.SourceImagesProjectDirectory = $imagesProjectDirectory
+    $state.StatisticsLisPath = $(if ($null -eq $statisticsLisFile) { $null } else { $statisticsLisFile.FullName })
     $state.OutputProductsDirectory = $outputProductsDirectory
     $state.StagingDirectory = $stagingDirectory
+    $state.StagedReadmePath = Join-Path $stagingDirectory $readmeFile.Name
 
-    $supFiles = @(Get-OrthoSupFiles -ProjectDirectory $projectDirectory)
-    $state.SupInputs = @($supFiles | ForEach-Object Name)
-    if ($supFiles.Count -eq 0) { throw "No *_o.sup files were found in $projectDirectory." }
-    $demSelection = Select-OrthoDemFile -ProjectDirectory $projectDirectory -DemName $DemName
+    $preflight = Invoke-DesktopPreflightRetry -ProjectName $ProjectName -DesktopRoot $DesktopRoot -State $state -DryRun:$DryRun -EnableInteractiveRetry:$EnableInteractivePreflightRetry
+    if (-not $preflight.CanExecute) {
+        if (-not $DryRun) { throw 'PRE-FLIGHT BLOCKED. No SOCET conversions, batch-file writes, or Desktop copying were performed. See Desktop preflight findings.' }
+        Write-OrthoLog -State $state -Level WARNING -Message 'DRY-RUN: real execution would be blocked. Continuing the diagnostic plan without conversions or Desktop writes.'
+    }
+
+    $supSelection = Get-OrthoSupSelection -ProjectDirectory $projectDirectory -SupPaths $SupPaths -Method $SupSelectionMode -IncludeColor:$IncludeColor
+    $state.SupInputs = @($supSelection.Files | ForEach-Object Name)
+    $state.SupSelectionMethod = $supSelection.Method
+    $state.SupSelectionErrors = @($supSelection.Errors)
+    if (-not $supSelection.IsValid) {
+        foreach ($selectionError in @($supSelection.Errors)) { Write-OrthoLog -State $state -Level ERROR -Message $selectionError }
+        throw 'Approved ortho SUP selection is invalid. No conversion or staging will be performed.'
+    }
+    $supFiles = @($supSelection.Files)
+    Write-OrthoLog -State $state -Level INFO -Message "Approved $($supFiles.Count) ortho SUP file(s) using $($supSelection.Method) selection."
+    $demSelection = Select-OrthoDemFile -ProjectDirectory $projectDirectory -DemName $DemName -DemPath $DemPath
     $demFile = $demSelection.File
     $state.DemSelected = $demFile.Name
     $state.DemSelectedPath = $demFile.FullName
@@ -151,11 +189,12 @@ try {
     }
 
     Write-OrthoLog -State $state -Level INFO -Message $(if ($DryRun) { 'DRY-RUN would run no conversions; validating generated products currently available.' } else { 'Validating generated products.' })
-    $validation = Get-ProductValidation -ProjectDirectory $projectDirectory -OutputProductsDirectory $outputProductsDirectory -ImagesProjectDirectory $imagesProjectDirectory -ProjectName $ProjectName -SelectedDemBaseName $demFile.BaseName -Configuration $config -IncludeColor:$IncludeColor
+    $validation = Get-ProductValidation -ProjectDirectory $projectDirectory -OutputProductsDirectory $outputProductsDirectory -ImagesProjectDirectory $imagesProjectDirectory -StatisticsLisPath $state.StatisticsLisPath -ProjectName $ProjectName -SelectedDemBaseName $demFile.BaseName -Configuration $config -SupSelection $supSelection -IncludeColor:$IncludeColor
     $state.ExpectedFiles = @($validation.Expected); $state.LocatedFiles = @($validation.Located); $state.MissingFiles = @($validation.Missing); $state.ZeroByteFiles = @($validation.ZeroByte); $state.DuplicateOrAmbiguousMatches = @($validation.Ambiguous); $state.OutputStructure = $validation.Structure; $state.StructureErrors = @($validation.StructureErrors)
     if (-not $validation.IsValid) { throw 'Required product validation failed. No transfer will be performed.' }
+    if (-not $preflight.IsSafePath) { throw 'Desktop destination could not be safely verified. Conversion and product plans were retained; destination inspection and copying were not attempted.' }
     Write-OrthoLog -State $state -Level INFO -Message $(if ($DryRun) { 'DRY-RUN would build Desktop staging plan.' } else { 'Building Desktop staging plan.' })
-    $copyPlan = New-ProductCopyPlan -ProductValidation $validation -StagingDirectory $stagingDirectory -Force:$Force
+    $copyPlan = New-ProductCopyPlan -ProductValidation $validation -StagingDirectory $stagingDirectory -AdditionalMainSourceFile $readmeFile.FullName -AdditionalMainProductRule 'Project README' -Force:$Force
     $state.FilesProposedForCopy = @($copyPlan.Items)
     $state.ExistingStagingConflicts = @($copyPlan.ExistingConflicts) + @($copyPlan.DuplicateTargets)
     $state.UnexpectedStagingItems = @($copyPlan.UnexpectedStagingItems)
@@ -174,68 +213,37 @@ try {
     foreach ($conflict in $copyPlan.ConflictDetails) {
         Write-OrthoLog -State $state -Level WARNING -Message "Desktop staging conflict: type='$($conflict.ConflictType)' source='$($conflict.SourcePath)' destination='$($conflict.DestinationPath)' destinationExists=$($conflict.DestinationAlreadyExists) destinationType='$($conflict.DestinationItemType)' duplicateSources='$($conflict.DuplicateSources -join ', ')'"
     }
-    if (-not $copyPlan.CanExecute) { throw 'Desktop staging conflicts, extras, or duplicate targets make the copy plan unsafe. Use -Force only after reviewing the report.' }
+    if (-not $copyPlan.CanExecute) {
+        if (-not $DryRun) { throw 'Desktop staging conflicts, extras, or duplicate targets make the copy plan unsafe.' }
+        Write-OrthoLog -State $state -Level WARNING -Message 'DRY-RUN: copy plan is unsafe; all mappings are recorded, but no files will be copied.'
+    }
+    if (-not $DryRun) {
+        $copyPreflight = Get-DesktopStagingPreflight -ProjectName $ProjectName -DesktopRoot $DesktopRoot -Stage BeforeCopy
+        $state.DesktopPreflight = @($state.DesktopPreflight) + $copyPreflight
+        foreach ($reason in @($copyPreflight.Reasons)) { Write-OrthoLog -State $state -Level WARNING -Message "PRE-COPY BLOCKED: $reason" }
+        if (-not $copyPreflight.CanExecute) { throw 'Desktop destination changed or is unsafe. No Desktop copying was performed. See Desktop preflight findings.' }
+    }
     Write-OrthoLog -State $state -Level INFO -Message $(if ($DryRun) { "DRY-RUN would copy validated products to Desktop: $stagingDirectory" } else { "Copying validated products to Desktop: $stagingDirectory" })
-    $copyResult = Invoke-ProductCopyPlan -CopyPlan $copyPlan -DryRun:$DryRun -Force:$Force
+    if ($DryRun -and -not $copyPlan.CanExecute) {
+        $copyResult = [pscustomobject]@{ Copied = @(); Skipped = @($copyPlan.Items | ForEach-Object { "$($_.Source) => $($_.StagingPath) (DryRun; blocked)" }) }
+    }
+    else { $copyResult = Invoke-ProductCopyPlan -CopyPlan $copyPlan -DryRun:$DryRun -Force:$Force }
     $state.FilesActuallyCopied = @($copyResult.Copied); $state.FilesSkipped = @($copyResult.Skipped)
-	if (-not $DryRun) {
-		$readmeFileName = [System.IO.Path]::GetFileName($ReadmePath)
-		$stagedReadmePath = Join-Path $stagingDirectory $readmeFileName
-
-		if (Test-Path -LiteralPath $stagedReadmePath) {
-			throw "README staging destination already exists: $stagedReadmePath"
-		}
-
-		Copy-Item -LiteralPath $ReadmePath -Destination $stagedReadmePath
-
-		$originalBytes = [System.IO.File]::ReadAllBytes($stagedReadmePath)
-
-		# Preserve the line-ending style already used by the README.
-		$newLine = "`r`n"
-
-		for ($i = 0; $i -lt $originalBytes.Length; $i++) {
-			if ($originalBytes[$i] -eq 10) {
-				if ($i -eq 0 -or $originalBytes[$i - 1] -ne 13) {
-					$newLine = "`n"
-				}
-				break
-			}
-		}
-
-		$producerLine = "Producer: $ProducerName$newLine"
-		$producerBytes = [System.Text.Encoding]::ASCII.GetBytes($producerLine)
-
-		$newBytes = New-Object byte[] ($producerBytes.Length + $originalBytes.Length)
-
-		[Array]::Copy(
-			$producerBytes,
-			0,
-			$newBytes,
-			0,
-			$producerBytes.Length
-		)
-
-		[Array]::Copy(
-			$originalBytes,
-			0,
-			$newBytes,
-			$producerBytes.Length,
-			$originalBytes.Length
-		)
-
-		[System.IO.File]::WriteAllBytes($stagedReadmePath, $newBytes)
-
-		Write-OrthoLog -State $state -Level INFO -Message "Copied README and added producer '$ProducerName': $stagedReadmePath"
-	}
-	
     if ($DryRun) {
         $state.StagingValidation = [pscustomobject]@{ IsValid = $null; Status = 'DryRunNotPerformed'; Missing = @(); ZeroByte = @(); Unexpected = @(); FilenameMismatches = @(); StructureErrors = @() }
+        Write-OrthoLog -State $state -Level INFO -Message "DRY-RUN would copy README and prepend producer '$ProducerName': $($state.StagedReadmePath)"
         Write-OrthoLog -State $state -Level INFO -Message "DRY-RUN would validate Desktop staging folder after copy: $stagingDirectory"
     }
     else {
+        $readmeHeaderResult = Add-StagedReadmeProducerHeader -StagedReadmePath $state.StagedReadmePath -ProducerName $ProducerName
+        if ($readmeHeaderResult.Updated) { Write-OrthoLog -State $state -Level INFO -Message "Copied README and added producer '$ProducerName': $($state.StagedReadmePath)" }
+        else { Write-OrthoLog -State $state -Level WARNING -Message "Staged README already contained a producer header; no duplicate header was added: $($state.StagedReadmePath)" }
         Write-OrthoLog -State $state -Level INFO -Message 'Validating the staged Desktop folder.'
-        $state.StagingValidation = Test-StagedProductSet -CopyPlan $copyPlan -StagingDirectory $stagingDirectory -OutputStructure $validation.Structure -AdditionalExpectedMainFile $stagedReadmePath
+        $state.StagingValidation = Test-StagedProductSet -CopyPlan $copyPlan -StagingDirectory $stagingDirectory -OutputStructure $validation.Structure -AdditionalExpectedMainFile $state.StagedReadmePath
         if (-not $state.StagingValidation.IsValid) { throw 'Post-copy Desktop staging validation failed. No source data was changed.' }
+    }
+    if ($DryRun -and (-not $preflight.CanExecute -or -not $copyPlan.CanExecute)) {
+        throw 'Dry-run diagnostic plan completed. Real execution is blocked by the reported Desktop destination conflicts; no conversions or Desktop writes were performed.'
     }
     $state.FinalSuccess = $true
     Write-OrthoLog -State $state -Level INFO -Message $(if ($DryRun) { 'Dry-run plan completed without conversion, Desktop staging creation, or copying.' } else { 'Workflow completed successfully and Desktop staging validation passed.' })
