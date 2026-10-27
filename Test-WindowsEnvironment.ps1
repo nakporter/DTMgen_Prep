@@ -136,7 +136,7 @@ try {
             $demCandidates = @(Get-ChildItem -LiteralPath $result.ProjectDirectory -File -Filter '*.dth' | Sort-Object Name)
             $result.DemCandidates = @($demCandidates | ForEach-Object FullName)
             $result.DemCandidateDetails = @($demCandidates | ForEach-Object { [ordered]@{ Name = $_.Name; FullName = $_.FullName; LastWriteTime = $_.LastWriteTime; Length = $_.Length; IsZeroByte = ($_.Length -le 0) } })
-            $result.DemSelectionGuidance = $(if ($demCandidates.Count -eq 1) { 'One candidate: the workflow will select it automatically.' } elseif ($demCandidates.Count -gt 1) { 'Multiple candidates: the workflow will prompt interactively when available; otherwise it will use the latest-modified fallback and log a warning.' } else { 'No candidates: the workflow will stop.' })
+            $result.DemSelectionGuidance = $(if ($demCandidates.Count -eq 1) { 'One candidate: direct workflow invocation can select it automatically; the normal launcher will show the required DEM picker.' } elseif ($demCandidates.Count -gt 1) { 'Multiple candidates: the normal launcher requires an explicit .dth picker selection; direct workflow invocation retains its interactive prompt or non-interactive latest-modified fallback with a warning.' } else { 'No candidates: the workflow will stop.' })
         }
         else { $result.Errors += "Project directory does not exist: $($result.ProjectDirectory)" }
     }
@@ -144,21 +144,17 @@ try {
 catch { $result.Errors += $_.Exception.Message }
 
 try {
-    $result.DesktopRootExists = Test-Path -LiteralPath $DesktopRoot -PathType Container
-    if (-not $result.DesktopRootExists) { $result.Errors += "DesktopRoot does not exist: $DesktopRoot" }
+    $result.DesktopPreflight = Get-DesktopStagingPreflight -ProjectName $ProjectName -DesktopRoot $DesktopRoot
+    $result.DesktopRootExists = $result.DesktopPreflight.IsSafePath
+    $result.StagingDirectory = $result.DesktopPreflight.StagingDirectory
+    $result.StagingDirectoryExists = $result.DesktopPreflight.DestinationExists
+    if (-not $result.DesktopPreflight.CanExecute) {
+        $result.Errors += @($result.DesktopPreflight.Reasons)
+        $result.DesktopWriteTest = 'Not performed: Desktop preflight blocked.'
+        $result.StagingConflict = 'Preflight blocked; -Force cannot bypass an existing or unsafe destination.'
+    }
     else {
-        $result.StagingDirectory = Resolve-ContainedPath -Root $DesktopRoot -Child $ProjectName -ChildLabel 'ProjectName'
-        $result.StagingDirectoryExists = Test-Path -LiteralPath $result.StagingDirectory -PathType Container
-        $stagingRootIsFile = (Test-Path -LiteralPath $result.StagingDirectory) -and -not $result.StagingDirectoryExists
-        if ($stagingRootIsFile) {
-            $result.StagingConflict = 'Exists as a file; this conflict cannot be bypassed with -Force.'
-            $result.Errors += "Desktop staging path exists as a file and must not be used: $($result.StagingDirectory)"
-        }
-        elseif ($result.StagingDirectoryExists) {
-            $result.StagingConflict = $(if ($Force) { 'Exists; -Force was supplied, but unexpected staged files/folders will still block the workflow.' } else { 'Exists; the workflow will refuse to overwrite without -Force.' })
-            if (-not $Force) { $result.Errors += "Desktop staging folder already exists; rerun with -Force only after inspection: $($result.StagingDirectory)" }
-        }
-        else { $result.StagingConflict = 'Does not exist; the workflow may create it only after complete product validation.' }
+        $result.StagingConflict = 'Does not exist; the workflow may create it only after complete product validation and a repeated Desktop preflight.'
         $testPath = Join-Path $DesktopRoot ('.ortho-workflow-desktop-write-test-' + [guid]::NewGuid().ToString('N') + '.tmp')
         try {
             [IO.File]::WriteAllText($testPath, 'created only by Test-WindowsEnvironment.ps1')
@@ -173,7 +169,7 @@ catch { $result.Errors += "Desktop staging check failed: $($_.Exception.Message)
 
 if (-not $result.IsWindows) { $result.Warnings += 'This is not Windows. No SOCET command was run; Windows-only integration results are intentionally unavailable.' }
 if ($result.SupFiles.Count -eq 0 -and $result.ProjectExists) { $result.Warnings += 'No *_o.sup files were found.' }
-if ($result.DemCandidates.Count -gt 1 -and $result.ProjectExists) { $result.Warnings += "Found $($result.DemCandidates.Count) .dth candidates. The workflow will prompt when interactive or use a latest-modified fallback with a warning when non-interactive." }
+if ($result.DemCandidates.Count -gt 1 -and $result.ProjectExists) { $result.Warnings += "Found $($result.DemCandidates.Count) .dth candidates. The normal launcher requires an explicit picker selection; direct workflow invocation retains its interactive prompt or non-interactive latest-modified fallback with a warning." }
 if ($result.DemCandidates.Count -eq 0 -and $result.ProjectExists) { $result.Warnings += 'No .dth candidates were found; the workflow will stop.' }
 $nonzeroLisCandidateCount = @($result.LisCandidateDetails | Where-Object { -not $_.IsZeroByte }).Count
 if ($nonzeroLisCandidateCount -eq 0 -and $result.ImagesProjectExists) { $result.Warnings += 'No nonzero .lis candidates were found in the SOCET images project directory; the workflow will stop.' }
