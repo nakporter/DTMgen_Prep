@@ -1,0 +1,19 @@
+# Illustrative generic parsing grammar only; not real SOCET filenames.
+# Entries before the separate LIS note are selected from the data project/output_products locations.
+SS_IMAGE_A_LEVEL1_o.raw
+SS_IMAGE_A_LEVEL2_o.raw
+SS_IMAGE_B_LEVEL1_o.raw
+SS_IMAGE_B_LEVEL2_o.raw
+IMAGE_A_LEVEL1_o_ortho2isis3.sh
+IMAGE_A_LEVEL2_o_ortho2isis3.sh
+IMAGE_B_LEVEL1_o_ortho2isis3.sh
+IMAGE_B_LEVEL2_o_ortho2isis3.sh
+SS_DTM_Example.raw
+SS_FOM_Example.raw
+DTM_SelectedDem_dem2isis3.sh
+MST_ProjectName.rep
+SelectedDem_GeoTIFF_Error_Map.png
+SelectedDem_GeoTIFF_Error_Map.gnu
+# The single required project-information file is selected separately from
+# <SocetImagesRoot>\<ProjectName>, not from the data project:
+project-information.lis
