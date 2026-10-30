@@ -1,5 +1,3 @@
-Set-Location "$env:USERPROFILE\Desktop\SOCET-OrthoWorkflow"
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -force
+& "$env:USERPROFILE\Desktop\DTMgen_Prep-main\Start-OrthoWorkflow.ps1"
 
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-
-.\Start-OrthoWorkflow.ps1
