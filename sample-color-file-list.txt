@@ -1,0 +1,25 @@
+# Illustrative generic parsing grammar: exactly 12 RAW plus 12 corresponding SH files.
+SS_IMAGE_A_BG_LEVEL1_o.raw
+SS_IMAGE_A_BG_LEVEL2_o.raw
+SS_IMAGE_A_IR_LEVEL1_o.raw
+SS_IMAGE_A_IR_LEVEL2_o.raw
+SS_IMAGE_A_RED_LEVEL1_o.raw
+SS_IMAGE_A_RED_LEVEL2_o.raw
+SS_IMAGE_B_BG_LEVEL1_o.raw
+SS_IMAGE_B_BG_LEVEL2_o.raw
+SS_IMAGE_B_IR_LEVEL1_o.raw
+SS_IMAGE_B_IR_LEVEL2_o.raw
+SS_IMAGE_B_RED_LEVEL1_o.raw
+SS_IMAGE_B_RED_LEVEL2_o.raw
+IMAGE_A_BG_LEVEL1_o_ortho2isis3.sh
+IMAGE_A_BG_LEVEL2_o_ortho2isis3.sh
+IMAGE_A_IR_LEVEL1_o_ortho2isis3.sh
+IMAGE_A_IR_LEVEL2_o_ortho2isis3.sh
+IMAGE_A_RED_LEVEL1_o_ortho2isis3.sh
+IMAGE_A_RED_LEVEL2_o_ortho2isis3.sh
+IMAGE_B_BG_LEVEL1_o_ortho2isis3.sh
+IMAGE_B_BG_LEVEL2_o_ortho2isis3.sh
+IMAGE_B_IR_LEVEL1_o_ortho2isis3.sh
+IMAGE_B_IR_LEVEL2_o_ortho2isis3.sh
+IMAGE_B_RED_LEVEL1_o_ortho2isis3.sh
+IMAGE_B_RED_LEVEL2_o_ortho2isis3.sh
