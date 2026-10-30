@@ -1,6 +1,6 @@
 {
   "SchemaVersion": "0.2",
-  "Purpose": "Generic completed-project parser. It validates structural filename suffixes and captures variable image identifiers and levels without hardcoding project-specific values.",
+  "Purpose": "Generic completed-project parser. It validates structural filename suffixes and captures variable image identifiers and levels without hardcoding project-specific values. When an approved SUP selection is provided, standard and COLOR ortho RAW/SH expectations are derived from that selection; the listed counts remain compatibility defaults for direct validation without an approved selection.",
   "KnownUnresolvedItems": [
     "The parser assumes standard RAW names begin with SS_, while their corresponding shell names omit that prefix.",
     "The parser treats _o as a required structural marker, with the level immediately before it.",
@@ -53,7 +53,7 @@
     { "Name": "DEM generated SH", "Role": "DemSh", "Group": "Standard", "SearchLocation": "ProjectDirectory", "Pattern": "^(?<DemId>.+)_dem2isis3\\.sh$", "ExpectedCount": 1, "Enabled": true },
     { "Name": "Final triangulation REP", "Role": "TriangulationRep", "Group": "Standard", "SearchLocation": "ProjectDirectory", "Pattern": "^MST_{ProjectNameRegex}\\.rep$", "ExpectedCount": 1, "Enabled": true },
     { "Name": "Selected-DEM GeoTIFF Error Map PNG", "Role": "ErrorMapPng", "Group": "Standard", "SearchLocation": "ProjectDirectory", "Pattern": "^{SelectedDemBaseNameRegex}_GeoTIFF_Error_Map\\.png$", "ExpectedCount": 1, "Enabled": true },
-    { "Name": "Project information LIS", "Role": "ProjectInfoLis", "Group": "Standard", "SearchLocation": "ImagesProjectDirectory", "Pattern": "^{ProjectNameRegex}_SS_statistics\\.lis$", "RequiredExtension": ".lis", "NonZeroCandidatesOnly": true, "ExpectedCount": 1, "Enabled": true },
+    { "Name": "Project information LIS", "Role": "ProjectInfoLis", "Group": "Standard", "SearchLocation": "ImagesProjectDirectory", "Pattern": "^.+\\.lis$", "RequiredExtension": ".lis", "NonZeroCandidatesOnly": true, "ExpectedCount": 1, "Enabled": true },
     { "Name": "Selected-DEM GeoTIFF Error Map GNU", "Role": "GeoTiffGnu", "Group": "Standard", "SearchLocation": "ProjectDirectory", "Pattern": "^{SelectedDemBaseNameRegex}_GeoTIFF_Error_Map\\.gnu$", "ExpectedCount": 1, "Enabled": true },
     { "Name": "COLOR RAW", "Role": "ColorRaw", "Group": "Color", "SearchLocation": "OutputProductsDirectory", "Pattern": "^SS_(?<ImageId>.+)_(?<Channel>BG|IR|RED)_(?<Level>[^_]+)_o\\.raw$", "ExpectedCount": 12, "Enabled": true },
     { "Name": "COLOR SH", "Role": "ColorSh", "Group": "Color", "SearchLocation": "OutputProductsDirectory", "Pattern": "^(?<ImageId>.+)_(?<Channel>BG|IR|RED)_(?<Level>[^_]+)_o_ortho2isis3\\.sh$", "ExpectedCount": 12, "Enabled": true }
